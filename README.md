@@ -1,5 +1,6 @@
 # xray-skls-file-browser
 [Blender](http://www.blender.org/) add-on for animations collection browser for X-Ray/Stalker engine .skls files.
+Attention. Since this add-on wide used python annotations, it requires at least python 3.6.
 
 ## Workflow with .skls files
 

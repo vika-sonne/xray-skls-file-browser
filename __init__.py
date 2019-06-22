@@ -6,7 +6,7 @@ bl_info = {
 	'name' : 'X-Ray .skls File Browser',
 	'description' : 'X-Ray/Stalker engine animation browser for .skls files.',
 	'author' : 'Viktoria Danchenko',
-	'version' : (0, 1),
+	'version' : (0, 2),
 	'blender' : (2, 79, 0),
 	'location' : '3D View > N Panel > Skls file browser',
 	'category' : '3D View',
@@ -29,7 +29,7 @@ class View3DPanel:
 
 class XRAY_OT_open_skls_file(bpy.types.Operator):
 	'Shows file open dialog, reads .skls file, cleares & populates animations list'
-	bl_idname = 'xray.open_skls_file'
+	bl_idname = 'skls_browser.open_skls_file'
 	bl_label = 'Open .skls file'
 	bl_description = 'Opens .skls file with collection of animations. Used to import X-Ray engine animations.'+\
 		' To import select object with X-Ray struct of bones'
@@ -75,8 +75,13 @@ class VIEW3D_PT_skls_animations(View3DPanel, bpy.types.Panel):
 	def draw(self, context):
 		layout = self.layout
 
-		col = layout.column(align=True)
-		col.operator(operator='xray.open_skls_file', text='Open skls file...')
+		row = layout.row(align=True)
+		try:
+			# integration with another add-on
+			row.operator(operator='xray_import.object', text='Import object file...')
+		except:
+			pass
+		row.operator(operator='skls_browser.open_skls_file', text='Open skls file...')
 		# if VIEW3D_PT_skls_animations.skls_file:
 		# 	col.label(text=VIEW3D_PT_skls_animations.skls_file.file_path)
 		# else:
@@ -113,14 +118,22 @@ def animations_index_changed(self, context):
 	# remove previous animation if need
 	ob = context.active_object
 	if ob.animation_data:
-		# need to remove previous animation to free the memory since .skls can contains thousand animations
 		try:
-			act = ob.animation_data.action
-			ob.animation_data_clear()
-			act.user_clear()
-			bpy.data.actions.remove(action=act)
+			# integration with another add-on
+			need_to_remove = ob.animation_data.action.name not in context.object.actions_to_egg.animations
 		except:
-			pass
+			need_to_remove = True
+		if need_to_remove:
+			# need to remove previous animation to free the memory since .skls can contains thousand animations
+			try:
+				act = ob.animation_data.action
+				ob.animation_data_clear()
+				act.user_clear()
+				bpy.data.actions.remove(action=act)
+			except:
+				pass
+
+	# import animation from .skls file
 	if animation_name not in bpy.data.actions:
 		# animation not imported yet # import & create animation to bpy.data.actions
 		context.window.cursor_set('WAIT')
@@ -139,6 +152,7 @@ def animations_index_changed(self, context):
 				ds.spaces[0].action = bpy.data.actions[animation_name]
 		except:
 			pass
+
 	# assign & play a new animation
 	# bpy.data.armatures[0].pose_position='POSE'
 	try:
