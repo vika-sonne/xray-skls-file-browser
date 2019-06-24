@@ -187,28 +187,29 @@ class Animation():
 
 	@staticmethod
 	def skip_animation(pr: PackedReader):
-		pr.skip_fmt('=IIf') # from, to, fps
-		ver = pr.getf('=H')[0] # ver
+		'pr.offset must be at first byte after animation name'
+		data, offset = pr.getv(), 4 + 4 + 4 + 2
+		ver = FastBytes.short_at(data, offset - 2)
 		if ver < 6:
 			raise UnsupportedVersionError(ver)
-		pr.skip_fmt('=BHffff') # flags, bone_or_part, speed, accure, falloff, power
-		bones_count = pr.getf('=H')[0]
-		for _1 in range(bones_count):
-			pr.skip_s() # name
-			pr.skip_fmt('=B') # flags
-			# envelopes:
-			for _2 in range(6):
-				pr.skip_fmt('=BB') # behaviours
-				# keys:
-				for _3 in range(pr.getf('H')[0]):
-					pr.skip_fmt('=ff') # value, time
-					if pr.getf('B')[0] != 4: # shape
-						pr.skip_fmt('=HHHHHHH') # tension, continuity, bias, params[4]
+
+		offset += (1 + 2 + 4 * 4) + 2
+		for _bone_idx in range(FastBytes.short_at(data, offset - 2)):
+			offset = FastBytes.skip_str_at(data, offset) + 1
+			for _fcurve_idx in range(6):
+				offset += 1 + 1 + 2
+				for _kf_idx in range(FastBytes.short_at(data, offset - 2)):
+					offset += (4 + 4) + 1
+					shape = data[offset - 1]
+					if shape != 4:
+						offset += 2 * 3 + 2 * 4
 		if ver >= 7:
-			# marks
-			for _1 in range(pr.getf('I')[0]):
-				pr.skip_s() # name
-				pr.skip_fmt('=' + 'ff'*range(pr.getf('I')[0])) # intervals[4]
+			offset += 4
+			for _bone_idx in range(FastBytes.int_at(data, offset - 4)):
+				offset += FastBytes.skip_str_at_a(data, offset) + 4
+				offset += (4 + 4) * FastBytes.int_at(data, offset - 4)
+		pr.skip(offset)
+
 
 	class Bone():
 		__slots__ = 'name', 'flags', 'envelopes'
@@ -236,7 +237,7 @@ class SklsFile():
 
 	def __init__(self, file_path: str):
 		self.file_path = file_path
-		self.animations: Dict[str, int] = {} # cached animations (name: offset)
+		self.animations: Dict[str, Tuple[int, int, int]] = {} # cached animations { name: (offset, frames, fps), }
 		with io.open(file_path, mode='rb') as f:
 			# read entire .skls file into memory
 			self.pr = PackedReader(f.read())
@@ -248,9 +249,12 @@ class SklsFile():
 		for _ in range(animations_count):
 			# index animation
 			name = self.pr.gets() # name
-			self.animations[name] = self.pr.offset() # first byte after name
+			_offset = self.pr.offset() # first byte after name
+			_from, _to, _fps = self.pr.getf('=IIf') # from, to, fps
+			self.animations[name] = (_offset, _to - _from, _fps)
+			self.pr.set_offset(_offset)
 			Animation.skip_animation(self.pr)
 
 	def get_animation(self, name: str) -> Animation:
-		self.pr.set_offset(self.animations[name])
+		self.pr.set_offset(self.animations[name][0])
 		return Animation.load_from_skl(self.pr, name)

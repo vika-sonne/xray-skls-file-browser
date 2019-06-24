@@ -6,7 +6,7 @@ bl_info = {
 	'name' : 'X-Ray .skls File Browser',
 	'description' : 'X-Ray/Stalker engine animation browser for .skls files.',
 	'author' : 'Viktoria Danchenko',
-	'version' : (0, 2),
+	'version' : (0, 3),
 	'blender' : (2, 79, 0),
 	'location' : '3D View > N Panel > Skls file browser',
 	'category' : '3D View',
@@ -27,7 +27,7 @@ class View3DPanel:
 	bl_region_type = 'UI'
 
 
-class XRAY_OT_open_skls_file(bpy.types.Operator):
+class SKLSBROWSER_OT_open_skls_file(bpy.types.Operator):
 	'Shows file open dialog, reads .skls file, cleares & populates animations list'
 	bl_idname = 'skls_browser.open_skls_file'
 	bl_label = 'Open .skls file'
@@ -38,6 +38,8 @@ class XRAY_OT_open_skls_file(bpy.types.Operator):
 	class SklsAnimations(bpy.types.PropertyGroup):
 		'Contains animation properties in animations list'
 		name = bpy.props.StringProperty(name='Name')
+		frames = bpy.props.IntProperty(name='frames')
+		fps = bpy.props.FloatProperty(name='fps')
 
 	filepath = bpy.props.StringProperty(subtype='FILE_PATH')
 	filter_glob = bpy.props.StringProperty(default='*.skls', options={'HIDDEN'})
@@ -51,12 +53,14 @@ class XRAY_OT_open_skls_file(bpy.types.Operator):
 		bpy.context.window.cursor_set('WAIT')
 		ob = bpy.context.object
 		ob.SklsAnimations.clear()
-		VIEW3D_PT_skls_animations.skls_file = xray_skls.SklsFile(file_path=self.filepath)
-		self.report({'INFO'}, 'Done: {} animation(s)'.format(len(VIEW3D_PT_skls_animations.skls_file.animations)))
+		VIEW3D_PT_skls_browser.skls_file = xray_skls.SklsFile(file_path=self.filepath)
+		self.report({'INFO'}, 'Done: {} animation(s)'.format(len(VIEW3D_PT_skls_browser.skls_file.animations)))
 		# fill list with animations names
-		for animation_name in VIEW3D_PT_skls_animations.skls_file.animations.keys():
+		for animation_name, offset_frames_fps in VIEW3D_PT_skls_browser.skls_file.animations.items():
 			newitem = ob.SklsAnimations.add()
 			newitem.name = animation_name
+			newitem.frames = offset_frames_fps[1]
+			newitem.fps = offset_frames_fps[2]
 		bpy.context.window.cursor_set('DEFAULT')
 		return {'FINISHED'}
 
@@ -66,7 +70,32 @@ class XRAY_OT_open_skls_file(bpy.types.Operator):
 		return {'RUNNING_MODAL'}
 
 
-class VIEW3D_PT_skls_animations(View3DPanel, bpy.types.Panel):
+class SKLSBROWSER_OT_close_skls_file(bpy.types.Operator):
+	'Closes .skls file and free resources'
+	bl_idname = 'skls_browser.close_skls_file'
+	bl_label = 'Close .skls file'
+	bl_description = 'Closes .skls file'
+	# bl_options = {'REGISTER', 'UNDO'}
+
+	@classmethod
+	def poll(cls, context):
+		ob = bpy.context.object
+		try:
+			return bool(ob.SklsAnimations) or bool(VIEW3D_PT_skls_browser.skls_file)
+		except:
+			return False
+
+	def execute(self, context):
+		ob = bpy.context.object
+		try:
+			ob.SklsAnimations.clear()
+		except:
+			pass
+		VIEW3D_PT_skls_browser.skls_file = None
+		return {'FINISHED'}
+
+
+class VIEW3D_PT_skls_browser(View3DPanel, bpy.types.Panel):
 	'Contains open .skls file operator, animations list'
 	bl_label = 'Skls file browser'
 
@@ -82,8 +111,9 @@ class VIEW3D_PT_skls_animations(View3DPanel, bpy.types.Panel):
 		except:
 			pass
 		row.operator(operator='skls_browser.open_skls_file', text='Open skls file...')
-		# if VIEW3D_PT_skls_animations.skls_file:
-		# 	col.label(text=VIEW3D_PT_skls_animations.skls_file.file_path)
+		row.operator(operator='skls_browser.close_skls_file', text='', icon='X')
+		# if VIEW3D_PT_skls_browser.skls_file:
+		# 	col.label(text=VIEW3D_PT_skls_browser.skls_file.file_path)
 		# else:
 		# 	col.label(text='')
 		if hasattr(context.object, 'SklsAnimations'):
@@ -94,8 +124,13 @@ class VIEW3D_PT_skls_animations(View3DPanel, bpy.types.Panel):
 
 class AnimationList_item(bpy.types.UIList):
 
-	def draw_item(self, _context, layout, _data, item : XRAY_OT_open_skls_file.SklsAnimations, _icon, _active_data, _active_propname):
+	def draw_item(self, _context, layout, _data, item : SKLSBROWSER_OT_open_skls_file.SklsAnimations,
+			_icon, _active_data, _active_propname):
 		row = layout.row(align=True)
+		row = row.split(percentage=0.37)
+		row.alignment = 'RIGHT'
+		row.label(text='%s@%s' % (item.frames, item.fps))
+		row.alignment = 'LEFT'
 		row.label(text=item.name)
 
 
@@ -112,9 +147,10 @@ def animations_index_changed(self, context):
 	except:
 		pass
 	# get new animation name
-	if not VIEW3D_PT_skls_animations.skls_file:
+	if not VIEW3D_PT_skls_browser.skls_file:
 		return
 	animation_name = self.SklsAnimations[self.SklsAnimations_index].name
+	animation_fps = self.SklsAnimations[self.SklsAnimations_index].fps
 	# remove previous animation if need
 	ob = context.active_object
 	if ob.animation_data:
@@ -140,7 +176,7 @@ def animations_index_changed(self, context):
 		fail_bones_names = set()
 		import_animation(
 			animation_name=animation_name,
-			animation=VIEW3D_PT_skls_animations.skls_file.get_animation(animation_name),
+			animation=VIEW3D_PT_skls_browser.skls_file.get_animation(animation_name),
 			bpy_armature=ob,
 			bonesmap={ b.name.lower(): b for b in ob.data.bones },
 			fail_bones_names=fail_bones_names)
@@ -169,6 +205,7 @@ def animations_index_changed(self, context):
 			context.scene.frame_start = act.frame_range[0]
 			context.scene.frame_current = act.frame_range[0]
 			context.scene.frame_end = act.frame_range[1]
+			context.scene.render.fps = animation_fps
 			bpy.ops.screen.animation_play()
 		except:
 			pass
@@ -255,23 +292,24 @@ def import_animation(
 	return ret
 
 classes = (
-	VIEW3D_PT_skls_animations,
-	XRAY_OT_open_skls_file.SklsAnimations,
-	XRAY_OT_open_skls_file,
+	VIEW3D_PT_skls_browser,
+	SKLSBROWSER_OT_open_skls_file.SklsAnimations,
+	SKLSBROWSER_OT_open_skls_file,
+	SKLSBROWSER_OT_close_skls_file,
 	AnimationList_item,
 )
 
 def register():
 	for _ in classes:
 		register_class(_)
-	bpy.types.Object.SklsAnimations = bpy.props.CollectionProperty(type=XRAY_OT_open_skls_file.SklsAnimations)
+	bpy.types.Object.SklsAnimations = bpy.props.CollectionProperty(type=SKLSBROWSER_OT_open_skls_file.SklsAnimations)
 	bpy.types.Object.SklsAnimations_index = bpy.props.IntProperty(update=animations_index_changed)
 
 def unregister():
 	for _ in classes:
 		unregister_class(_)
-	if VIEW3D_PT_skls_animations.skls_file:
-		VIEW3D_PT_skls_animations.skls_file = None
+	if VIEW3D_PT_skls_browser.skls_file:
+		VIEW3D_PT_skls_browser.skls_file = None
 	del bpy.types.Object.SklsAnimations
 	del bpy.types.Object.SklsAnimations_index
 
