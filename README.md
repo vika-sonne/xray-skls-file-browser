@@ -1,10 +1,10 @@
 # xray-skls-file-browser
-[Blender](http://www.blender.org/) add-on for animations collection browser for X-Ray/Stalker engine .skls files.
-Attention. Since this add-on wide used python annotations, it requires at least python 3.6.
+[Blender](http://www.blender.org/) 2.80 add-on for animations collection browser for X-Ray/Stalker engine .skls files.
+To use Blender 2.79 just clone/download "blender2.79" branch.
 
 ## Workflow with .skls files
 
-1. Use [blender-xray](https://github.com/PavelBlend/blender-xray) (by PavelBlend) add-on to import .object file with X-Ray armature bones:
+1. Install [blender-xray](https://github.com/PavelBlend/blender-xray) add-on to import .object file with X-Ray armature bones. You can import .object file by click the **Import object file...** button on panel **Skls file browser**:
 ![](/images/Blender_import_object.png)
 
 1. Select .object file:
@@ -29,4 +29,5 @@ hunter_1.object file is from **Shadow Of Chernobyl** with **Goldsphere Ending** 
 stalker_animation.skls file: gamedata/meshes/actors/stalker_animation.omf.
 
 > Thanks to X-Ray/Stalker engine developers.
-Thanks to Vakhurin Sergey (igel), Pavel_Blend: https://github.com/PavelBlend/blender-xray.
+
+> Thanks to Vakhurin Sergey (igel), Pavel_Blend: https://github.com/PavelBlend/blender-xray.
